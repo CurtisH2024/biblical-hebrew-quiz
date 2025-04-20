@@ -5,36 +5,31 @@ import openai
 import ssl
 import certifi
 
-# SSL fix for some Windows/conda environments
+# SSL fix (if needed)
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 ssl._create_default_https_context = ssl._create_default_https_context or ssl.create_default_context
 
-# Load OpenAI API key
+# Load OpenAI API key from Streamlit Secrets
 openai.api_key = st.secrets["openai_api_key"]
 
-# List of books in the Bible (you can extend this list as needed)
+# Bible books
 bible_books = [
-    "בראשית", "שמות", "ויקרא", "במדבר", "דברים",  # Genesis, Exodus, Leviticus, Numbers, Deuteronomy
-    "יהושע", "שופטים", "רות", "שמואל א", "שמואל ב",  # Joshua, Judges, Ruth, 1 Samuel, 2 Samuel
-    "מלכים א", "מלכים ב", "ישעיהו", "ירמיהו", "יחזקאל",  # 1 Kings, 2 Kings, Isaiah, Jeremiah, Ezekiel
-    "הושע", "יואל", "עמוס", "עובדיה", "יונה",  # Hosea, Joel, Amos, Obadiah, Jonah
-    "מיכה", "נחום", "חבקוק", "צפניה", "חגי",  # Micah, Nahum, Habakkuk, Zephaniah, Haggai
-    "זכריה", "מלאכי", "תהילים", "משלי", "איוב",  # Zechariah, Malachi, Psalms, Proverbs, Job
-    "שיר השירים", "רות", "איכה", "כוהלת", "אסתר",  # Song of Songs, Ruth, Lamentations, Ecclesiastes, Esther
-    "דניאל", "עזרא", "נחמיה", "דברי הימים א", "דברי הימים ב"  # Daniel, Ezra, Nehemiah, 1 Chronicles, 2 Chronicles
+    "בראשית", "שמות", "ויקרא", "במדבר", "דברים",
+    "יהושע", "שופטים", "רות", "שמואל א", "שמואל ב",
+    "מלכים א", "מלכים ב", "ישעיהו", "ירמיהו", "יחזקאל",
+    "הושע", "יואל", "עמוס", "עובדיה", "יונה",
+    "מיכה", "נחום", "חבקוק", "צפניה", "חגי",
+    "זכריה", "מלאכי", "תהילים", "משלי", "איוב",
+    "שיר השירים", "רות", "איכה", "כוהלת", "אסתר",
+    "דניאל", "עזרא", "נחמיה", "דברי הימים א", "דברי הימים ב"
 ]
 
 # Streamlit UI
 st.set_page_config(page_title="Biblical Hebrew Quiz Generator", layout="centered")
 st.title("📜 Biblical Hebrew Reading Comprehension Quiz")
 
-# Dropdown for book selection
 book = st.selectbox("📖 Select Book of the Bible:", bible_books)
-
-# User input for chapter
 chapter = st.number_input("📄 Chapter Number:", min_value=1, step=1)
-
-# Number of questions
 num_questions = st.slider("🔢 Number of Questions", min_value=3, max_value=10, value=5)
 
 if st.button("Generate Quiz"):
@@ -49,15 +44,17 @@ if st.button("Generate Quiz"):
 אל תציג את הפסוקים עצמם.
 """
 
-            # Make OpenAI request using the API
-            response = openai.Completion.create(
-                model="text-davinci-003",  # You can replace with another model if preferred
-                prompt=prompt,
-                max_tokens=1000,
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "אתה מורה ללשון מקראית."},
+                    {"role": "user", "content": prompt}
+                ],
                 temperature=0.7,
+                max_tokens=1500,
             )
 
-            quiz_text = response.choices[0].text.strip()  # Adjust based on the response structure
+            quiz_text = response.choices[0].message.content.strip()
             st.markdown("### ✍️ המבחן שלך:")
             st.markdown(quiz_text)
 
