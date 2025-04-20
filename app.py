@@ -1,8 +1,17 @@
 import streamlit as st
 import requests
+import ssl
+import certifi
 
-# Load Hugging Face API key securely
+# SSL fix for some Windows/conda environments
+ssl_context = ssl.create_default_context(cafile=certifi.where())
+ssl._create_default_https_context = ssl._create_default_https_context or ssl.create_default_context
+
+# Load Hugging Face API key securely from Streamlit secrets
 HF_API_KEY = st.secrets["hugging_face_api_key"]
+
+# Use a faster model that's less likely to timeout
+HF_MODEL_ENDPOINT = "https://api-inference.huggingface.co/models/tiiuae/falcon-rw-1b"
 
 # List of books in the Bible
 bible_books = [
@@ -16,7 +25,7 @@ bible_books = [
     "דניאל", "עזרא", "נחמיה", "דברי הימים א", "דברי הימים ב"
 ]
 
-# Streamlit UI
+# Streamlit UI setup
 st.set_page_config(page_title="Biblical Hebrew Quiz Generator", layout="centered")
 st.title("📜 Biblical Hebrew Reading Comprehension Quiz")
 
@@ -25,9 +34,9 @@ chapter = st.number_input("📄 Chapter Number:", min_value=1, step=1)
 num_questions = st.slider("🔢 Number of Questions", min_value=3, max_value=10, value=5)
 
 if st.button("Generate Quiz"):
-    with st.spinner("Generating quiz..."):
-        try:
-            prompt = f"""
+    with st.spinner("🛠️ Generating quiz using Hugging Face..."):
+
+        prompt = f"""
 אתה מורה ללשון מקראית. כתוב שאלון הבנת הנקרא על פרק {chapter} מתוך ספר {book}.
 השאלון צריך לכלול {num_questions} שאלות.
 השתמש בעברית מקראית בלבד (כולל ניקוד מלא), שאל שאלות פרטניות על תוכן הפרק.
@@ -36,33 +45,35 @@ if st.button("Generate Quiz"):
 אל תציג את הפסוקים עצמם.
 """
 
-            # Call Hugging Face inference API
-            headers = {
-                "Authorization": f"Bearer {HF_API_KEY}"
+        headers = {
+            "Authorization": f"Bearer {HF_API_KEY}"
+        }
+
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": 300,
+                "temperature": 0.7,
+            },
+            "options": {
+                "wait_for_model": True
             }
+        }
 
-            payload = {
-                "inputs": prompt,
-                "parameters": {"max_new_tokens": 700, "temperature": 0.7},
-                "options": {"wait_for_model": True}
-            }
-
-            response = requests.post(
-                "https://api-inference.huggingface.co/models/bigscience/bloom-1b1",  # You can change to another model
-                headers=headers,
-                json=payload
-            )
-
+        try:
+            response = requests.post(HF_MODEL_ENDPOINT, headers=headers, json=payload)
+            response.raise_for_status()
             result = response.json()
 
-            if "error" in result:
-                st.error(f"❌ API Error: {result['error']}")
+            if isinstance(result, list) and "generated_text" in result[0]:
+                quiz_text = result[0]["generated_text"].strip()
+            elif isinstance(result, dict) and "error" in result:
+                raise Exception(result["error"])
             else:
-                generated_text = result[0]["generated_text"]
-                # Extract only the part after the prompt
-                quiz_text = generated_text[len(prompt):].strip()
-                st.markdown("### ✍️ המבחן שלך:")
-                st.markdown(quiz_text)
+                quiz_text = result.get("generated_text", "⚠️ No output received.")
+
+            st.markdown("### ✍️ המבחן שלך:")
+            st.markdown(quiz_text)
 
         except Exception as e:
             st.error(f"❌ Error generating quiz:\n\n{e}")
