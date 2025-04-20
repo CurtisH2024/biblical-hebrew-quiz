@@ -1,18 +1,16 @@
-# app.py
-
 import streamlit as st
 import openai
 import ssl
 import certifi
 
-# SSL fix (if needed)
+# SSL fix (optional but recommended for some environments)
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 ssl._create_default_https_context = ssl._create_default_https_context or ssl.create_default_context
 
-# Load OpenAI API key from Streamlit Secrets
+# Load OpenAI API key
 openai.api_key = st.secrets["openai_api_key"]
 
-# Bible books
+# List of books in the Bible
 bible_books = [
     "בראשית", "שמות", "ויקרא", "במדבר", "דברים",
     "יהושע", "שופטים", "רות", "שמואל א", "שמואל ב",
@@ -44,7 +42,8 @@ if st.button("Generate Quiz"):
 אל תציג את הפסוקים עצמם.
 """
 
-            response = openai.ChatCompletion.create(
+            # Correct method for OpenAI v1+ library
+            response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "אתה מורה ללשון מקראית."},
