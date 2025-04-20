@@ -1,14 +1,8 @@
 import streamlit as st
-import openai
-import ssl
-import certifi
+import requests
 
-# SSL fix (optional but recommended for some environments)
-ssl_context = ssl.create_default_context(cafile=certifi.where())
-ssl._create_default_https_context = ssl._create_default_https_context or ssl.create_default_context
-
-# Load OpenAI API key
-openai.api_key = st.secrets["openai_api_key"]
+# Load Hugging Face API key securely
+HF_API_KEY = st.secrets["hugging_face_api_key"]
 
 # List of books in the Bible
 bible_books = [
@@ -18,7 +12,7 @@ bible_books = [
     "הושע", "יואל", "עמוס", "עובדיה", "יונה",
     "מיכה", "נחום", "חבקוק", "צפניה", "חגי",
     "זכריה", "מלאכי", "תהילים", "משלי", "איוב",
-    "שיר השירים", "רות", "איכה", "כוהלת", "אסתר",
+    "שיר השירים", "איכה", "קהלת", "אסתר",
     "דניאל", "עזרא", "נחמיה", "דברי הימים א", "דברי הימים ב"
 ]
 
@@ -42,20 +36,33 @@ if st.button("Generate Quiz"):
 אל תציג את הפסוקים עצמם.
 """
 
-            # Correct method for OpenAI v1+ library
-            response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "אתה מורה ללשון מקראית."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1500,
+            # Call Hugging Face inference API
+            headers = {
+                "Authorization": f"Bearer {HF_API_KEY}"
+            }
+
+            payload = {
+                "inputs": prompt,
+                "parameters": {"max_new_tokens": 700, "temperature": 0.7},
+                "options": {"wait_for_model": True}
+            }
+
+            response = requests.post(
+                "https://api-inference.huggingface.co/models/bigscience/bloom-1b1",  # You can change to another model
+                headers=headers,
+                json=payload
             )
 
-            quiz_text = response.choices[0].message.content.strip()
-            st.markdown("### ✍️ המבחן שלך:")
-            st.markdown(quiz_text)
+            result = response.json()
+
+            if "error" in result:
+                st.error(f"❌ API Error: {result['error']}")
+            else:
+                generated_text = result[0]["generated_text"]
+                # Extract only the part after the prompt
+                quiz_text = generated_text[len(prompt):].strip()
+                st.markdown("### ✍️ המבחן שלך:")
+                st.markdown(quiz_text)
 
         except Exception as e:
             st.error(f"❌ Error generating quiz:\n\n{e}")
