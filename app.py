@@ -2,8 +2,8 @@ import streamlit as st
 import requests
 import ssl
 import certifi
-import re
 import random
+import re
 
 # SSL fix (for some environments)
 ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -34,16 +34,24 @@ chapter = st.number_input("📄 Chapter Number:", min_value=1, step=1)
 num_questions = st.slider("🔢 Number of Questions", min_value=3, max_value=10, value=5)
 
 def call_model(prompt):
-    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    headers = {
+        "Authorization": f"Bearer {HF_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
     payload = {
         "inputs": prompt,
-        "parameters": {"max_new_tokens": 512, "temperature": 0.7},
-        "options": {"wait_for_model": True}
+        "parameters": {"max_new_tokens": 512, "temperature": 0.7}
     }
+
     response = requests.post(HF_MODEL_ENDPOINT, headers=headers, json=payload)
-    response.raise_for_status()
-    output = response.json()
-    return output[0]["generated_text"] if isinstance(output, list) else output.get("generated_text", "")
+
+    # Handle the response and error cases
+    if response.status_code != 200:
+        st.error(f"❌ API error: {response.status_code} - {response.text}")
+        return ""
+
+    return response.json()[0]["generated_text"]
 
 def parse_quiz(raw_text):
     qa_blocks = re.split(r"\n(?=\d+[.)])", raw_text.strip())
@@ -80,30 +88,34 @@ if st.button("Generate Quiz"):
 
         try:
             result_text = call_model(prompt)
+            if not result_text:
+                st.warning("⚠️ No valid questions generated. Try again.")
+                return
+
             quiz = parse_quiz(result_text)
 
             if not quiz:
-                st.warning("⚠️ לא נמצאו שאלות תקפות. ייתכן שהמודל לא הגיב כראוי.")
+                st.warning("⚠️ No valid questions found. Try again.")
             else:
-                st.markdown("### ✍️ המבחן שלך:")
+                st.markdown("### ✍️ Your Quiz:")
                 score = 0
 
                 for idx, q in enumerate(quiz):
                     st.markdown(f"**{idx+1}. {q['question']}**")
                     user_answer = st.radio(
-                        label="בחר תשובה:",
+                        label="Select your answer:",
                         options=q["options"],
                         key=f"q_{idx}"
                     )
-                    if st.button(f"בדוק שאלה {idx+1}", key=f"check_{idx}"):
+                    if st.button(f"Check Question {idx+1}", key=f"check_{idx}"):
                         if user_answer == q["correct"]:
-                            st.success("✅ תשובה נכונה!")
+                            st.success("✅ Correct answer!")
                             score += 1
                         else:
-                            st.error(f"❌ שגוי. התשובה הנכונה היא: {q['correct']}")
+                            st.error(f"❌ Incorrect. The correct answer is: {q['correct']}")
 
                 st.markdown("---")
-                st.markdown(f"**📊 ציון סופי: {score} מתוך {len(quiz)}**")
+                st.markdown(f"**📊 Final Score: {score} out of {len(quiz)}**")
 
         except Exception as e:
             st.error(f"❌ Error generating or displaying quiz:\n\n{e}")
