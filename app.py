@@ -1,121 +1,51 @@
 import streamlit as st
-import requests
-import ssl
-import certifi
-import random
-import re
+from transformers import pipeline
 
-# SSL fix (for some environments)
-ssl_context = ssl.create_default_context(cafile=certifi.where())
-ssl._create_default_https_context = ssl._create_default_https_context or ssl.create_default_context
+# Set up Hugging Face's transformers pipeline for text generation
+# We're using t5-base here as an example, but you can experiment with other models.
 
-# Load Hugging Face API key
-HF_API_KEY = st.secrets["hugging_face_api_key"]
-HF_MODEL_ENDPOINT = "https://api-inference.huggingface.co/models/google/flan-t5-large"
+# Use Hugging Face's pipeline for text generation
+text_generator = pipeline("text-generation", model="t5-base")
 
-# List of Bible books
-bible_books = [
-    "בראשית", "שמות", "ויקרא", "במדבר", "דברים",
-    "יהושע", "שופטים", "רות", "שמואל א", "שמואל ב",
-    "מלכים א", "מלכים ב", "ישעיהו", "ירמיהו", "יחזקאל",
-    "הושע", "יואל", "עמוס", "עובדיה", "יונה",
-    "מיכה", "נחום", "חבקוק", "צפניה", "חגי",
-    "זכריה", "מלאכי", "תהילים", "משלי", "איוב",
-    "שיר השירים", "איכה", "קהלת", "אסתר",
-    "דניאל", "עזרא", "נחמיה", "דברי הימים א", "דברי הימים ב"
-]
+# Function to grade the content, grammar, and writing style using Hugging Face's model
+def grade_paper(text, book_content):
+    # Combine book content with the input to give context
+    prompt = f"""
+    You are a professor grading a paper based on a book that was written by the user.
+    Please evaluate the following submission based on the content, grammar, and writing style.
 
-# Streamlit app config
-st.set_page_config(page_title="Biblical Hebrew Quiz", layout="centered")
-st.title("📜 Biblical Hebrew Reading Comprehension Quiz")
+    Book content: {book_content}
 
-book = st.selectbox("📖 Select Book of the Bible:", bible_books)
-chapter = st.number_input("📄 Chapter Number:", min_value=1, step=1)
-num_questions = st.slider("🔢 Number of Questions", min_value=3, max_value=10, value=5)
+    The student's submission: {text}
 
-def call_model(prompt):
-    headers = {
-        "Authorization": f"Bearer {HF_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    1. Rate the content out of 100, considering its relevance, originality, and clarity.
+    2. Rate the grammar out of 100, considering the correctness, sentence structure, and punctuation.
+    3. Rate the writing style out of 100, considering tone, readability, and engagement.
 
-    payload = {
-        "inputs": prompt,
-        "parameters": {"max_new_tokens": 512, "temperature": 0.7}
-    }
+    Provide a detailed breakdown of the grades and an overall assessment.
+    """
+    
+    # Use Hugging Face's model to generate a response based on the prompt
+    result = text_generator(prompt, max_length=500, num_return_sequences=1)
+    
+    # Return the model's generated feedback
+    return result[0]['generated_text'].strip()
 
-    response = requests.post(HF_MODEL_ENDPOINT, headers=headers, json=payload)
+# Streamlit UI
+st.title("Paper Grader with Hugging Face")
 
-    # Handle the response and error cases
-    if response.status_code != 200:
-        st.error(f"❌ API error: {response.status_code} - {response.text}")
-        return ""
+# Input for book content (optional)
+book_content = st.text_area("Enter the content of your book (optional)", height=300)
 
-    return response.json()[0]["generated_text"]
+# Input for the student submission (paper)
+student_submission = st.text_area("Enter your submission", height=300)
 
-def parse_quiz(raw_text):
-    qa_blocks = re.split(r"\n(?=\d+[.)])", raw_text.strip())
-    quiz_data = []
-
-    for block in qa_blocks:
-        question_match = re.search(r"\d+[.)]\s*(.*?)\n", block)
-        if not question_match:
-            continue
-        question = question_match.group(1).strip()
-
-        options = re.findall(r"[א-ד]\.?\s(.*)", block)
-        if not options or len(options) < 4:
-            continue
-
-        correct = options[0]
-        random.shuffle(options)
-
-        quiz_data.append({
-            "question": question,
-            "options": options,
-            "correct": correct
-        })
-    return quiz_data
-
-if st.button("Generate Quiz"):
-    with st.spinner("📜 Generating quiz..."):
-
-        prompt = f"""
-כתוב {num_questions} שאלות הבנת הנקרא על פרק {chapter} מתוך ספר {book}, בעברית מקראית עם ניקוד.
-עבור כל שאלה, הצג ארבע תשובות אפשריות (א. ב. ג. ד.), ורק אחת מהן נכונה והיא הראשונה.
-אל תציין את הפסוקים עצמם.
-"""
-
-        try:
-            result_text = call_model(prompt)
-            if not result_text:
-                st.warning("⚠️ No valid questions generated. Try again.")
-                return
-
-            quiz = parse_quiz(result_text)
-
-            if not quiz:
-                st.warning("⚠️ No valid questions found. Try again.")
-            else:
-                st.markdown("### ✍️ Your Quiz:")
-                score = 0
-
-                for idx, q in enumerate(quiz):
-                    st.markdown(f"**{idx+1}. {q['question']}**")
-                    user_answer = st.radio(
-                        label="Select your answer:",
-                        options=q["options"],
-                        key=f"q_{idx}"
-                    )
-                    if st.button(f"Check Question {idx+1}", key=f"check_{idx}"):
-                        if user_answer == q["correct"]:
-                            st.success("✅ Correct answer!")
-                            score += 1
-                        else:
-                            st.error(f"❌ Incorrect. The correct answer is: {q['correct']}")
-
-                st.markdown("---")
-                st.markdown(f"**📊 Final Score: {score} out of {len(quiz)}**")
-
-        except Exception as e:
-            st.error(f"❌ Error generating or displaying quiz:\n\n{e}")
+# When the user submits the form
+if st.button("Grade My Paper"):
+    if student_submission.strip() != "":
+        # Grade the paper
+        grade_response = grade_paper(student_submission, book_content)
+        st.write("### Grading Result:")
+        st.write(grade_response)
+    else:
+        st.warning("Please enter your submission before grading.")
