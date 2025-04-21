@@ -3,14 +3,15 @@ import requests
 import ssl
 import certifi
 import re
+import random
 
-# SSL fix for some Windows/conda environments
+# SSL fix (for some Windows/conda environments)
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 ssl._create_default_https_context = ssl._create_default_https_context or ssl.create_default_context
 
-# Load Hugging Face API key securely
+# Load Hugging Face API key
 HF_API_KEY = st.secrets["hugging_face_api_key"]
-HF_MODEL_ENDPOINT = "https://api-inference.huggingface.co/models/tiiuae/falcon-rw-1b"
+HF_MODEL_ENDPOINT = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1"
 
 # List of Bible books
 bible_books = [
@@ -24,7 +25,7 @@ bible_books = [
     "דניאל", "עזרא", "נחמיה", "דברי הימים א", "דברי הימים ב"
 ]
 
-# Page setup
+# Streamlit app config
 st.set_page_config(page_title="Biblical Hebrew Quiz", layout="centered")
 st.title("📜 Biblical Hebrew Reading Comprehension Quiz")
 
@@ -36,36 +37,36 @@ def call_model(prompt):
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     payload = {
         "inputs": prompt,
-        "parameters": {"max_new_tokens": 500, "temperature": 0.7},
+        "parameters": {"max_new_tokens": 800, "temperature": 0.7},
         "options": {"wait_for_model": True}
     }
-
     response = requests.post(HF_MODEL_ENDPOINT, headers=headers, json=payload)
     response.raise_for_status()
     output = response.json()
     return output[0]["generated_text"] if isinstance(output, list) else output.get("generated_text", "")
 
-def parse_quiz(quiz_text):
-    pattern = r"\d+[.)]\s*(.*?)\n(?:-?\s?[א-ד]\.?\s.*\n?)+"
-    questions = re.findall(pattern, quiz_text, re.DOTALL)
-    
-    qa_blocks = re.split(r"\n(?=\d+[.)])", quiz_text)
+def parse_quiz(raw_text):
+    qa_blocks = re.split(r"\n(?=\d+[.)])", raw_text.strip())
     quiz_data = []
 
     for block in qa_blocks:
-        q_match = re.match(r"\d+[.)]\s*(.*?)\n", block)
-        if not q_match:
+        question_match = re.search(r"\d+[.)]\s*(.*?)\n", block)
+        if not question_match:
             continue
-        question = q_match.group(1).strip()
+        question = question_match.group(1).strip()
 
         options = re.findall(r"[א-ד]\.?\s(.*)", block)
-        correct_option = options[0] if options else None  # Assuming the first one is correct
+        if not options or len(options) < 4:
+            continue
+
+        correct = options[0]
+        random.shuffle(options)
+
         quiz_data.append({
             "question": question,
             "options": options,
-            "correct": correct_option
+            "correct": correct
         })
-
     return quiz_data
 
 if st.button("Generate Quiz"):
@@ -75,36 +76,37 @@ if st.button("Generate Quiz"):
 אתה מורה ללשון מקראית. כתוב שאלון הבנת הנקרא על פרק {chapter} מתוך ספר {book}.
 השאלון צריך לכלול {num_questions} שאלות.
 השתמש בעברית מקראית בלבד (כולל ניקוד מלא), שאל שאלות פרטניות על תוכן הפרק.
-הצג כל שאלה בצורה של שאלה אמיתית.
-עבור כל שאלה, הצג ארבע אפשרויות – רק אחת מהן נכונה. 
-ציין את האפשרות הנכונה ראשונה בכל מקרה.
 אל תציג את הפסוקים עצמם.
+הצג כל שאלה בצורה של שאלה אמיתית.
+עבור כל שאלה, הצג ארבע אפשרויות תשובה (א. ב. ג. ד.), כשהאפשרות הנכונה תמיד ראשונה.
 """
 
         try:
             result_text = call_model(prompt)
             quiz = parse_quiz(result_text)
 
-            st.markdown("### ✍️ המבחן שלך:")
-            score = 0
+            if not quiz:
+                st.warning("⚠️ לא נמצאו שאלות תקפות. ייתכן שהמודל לא הגיב כראוי.")
+            else:
+                st.markdown("### ✍️ המבחן שלך:")
+                score = 0
 
-            for idx, q in enumerate(quiz):
-                st.markdown(f"**{idx+1}. {q['question']}**")
-                selected = st.radio(
-                    f"שאלה {idx+1}",
-                    options=q["options"],
-                    key=f"q{idx}"
-                )
+                for idx, q in enumerate(quiz):
+                    st.markdown(f"**{idx+1}. {q['question']}**")
+                    user_answer = st.radio(
+                        label="בחר תשובה:",
+                        options=q["options"],
+                        key=f"q_{idx}"
+                    )
+                    if st.button(f"בדוק שאלה {idx+1}", key=f"check_{idx}"):
+                        if user_answer == q["correct"]:
+                            st.success("✅ תשובה נכונה!")
+                            score += 1
+                        else:
+                            st.error(f"❌ שגוי. התשובה הנכונה היא: {q['correct']}")
 
-                if st.button(f"בדוק תשובה {idx+1}", key=f"btn{idx}"):
-                    if selected == q["correct"]:
-                        st.success("✅ תשובה נכונה!")
-                        score += 1
-                    else:
-                        st.error(f"❌ שגוי. התשובה הנכונה היא: {q['correct']}")
-
-            st.markdown("---")
-            st.markdown(f"**ציון סופי: {score} מתוך {len(quiz)}**")
+                st.markdown("---")
+                st.markdown(f"**📊 ציון סופי: {score} מתוך {len(quiz)}**")
 
         except Exception as e:
             st.error(f"❌ Error generating or displaying quiz:\n\n{e}")
