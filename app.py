@@ -5,13 +5,13 @@ import certifi
 import re
 import random
 
-# SSL fix (for some Windows/conda environments)
+# SSL fix (for some environments)
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 ssl._create_default_https_context = ssl._create_default_https_context or ssl.create_default_context
 
 # Load Hugging Face API key
 HF_API_KEY = st.secrets["hugging_face_api_key"]
-HF_MODEL_ENDPOINT = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1"
+HF_MODEL_ENDPOINT = "https://api-inference.huggingface.co/models/google/flan-t5-large"
 
 # List of Bible books
 bible_books = [
@@ -37,7 +37,7 @@ def call_model(prompt):
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     payload = {
         "inputs": prompt,
-        "parameters": {"max_new_tokens": 800, "temperature": 0.7},
+        "parameters": {"max_new_tokens": 512, "temperature": 0.7},
         "options": {"wait_for_model": True}
     }
     response = requests.post(HF_MODEL_ENDPOINT, headers=headers, json=payload)
@@ -73,12 +73,9 @@ if st.button("Generate Quiz"):
     with st.spinner("📜 Generating quiz..."):
 
         prompt = f"""
-אתה מורה ללשון מקראית. כתוב שאלון הבנת הנקרא על פרק {chapter} מתוך ספר {book}.
-השאלון צריך לכלול {num_questions} שאלות.
-השתמש בעברית מקראית בלבד (כולל ניקוד מלא), שאל שאלות פרטניות על תוכן הפרק.
-אל תציג את הפסוקים עצמם.
-הצג כל שאלה בצורה של שאלה אמיתית.
-עבור כל שאלה, הצג ארבע אפשרויות תשובה (א. ב. ג. ד.), כשהאפשרות הנכונה תמיד ראשונה.
+כתוב {num_questions} שאלות הבנת הנקרא על פרק {chapter} מתוך ספר {book}, בעברית מקראית עם ניקוד.
+עבור כל שאלה, הצג ארבע תשובות אפשריות (א. ב. ג. ד.), ורק אחת מהן נכונה והיא הראשונה.
+אל תציין את הפסוקים עצמם.
 """
 
         try:
