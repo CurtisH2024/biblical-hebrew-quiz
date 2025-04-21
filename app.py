@@ -1,11 +1,9 @@
 import streamlit as st
 from transformers import pipeline
 
-# Set up Hugging Face's transformers pipeline for text generation
-# We're using t5-base here as an example, but you can experiment with other models.
-
-# Use Hugging Face's pipeline for text generation
-text_generator = pipeline("text-generation", model="t5-base")
+# Lazy loading of the model
+def load_model():
+    return pipeline("text-generation", model="gpt2")
 
 # Function to grade the content, grammar, and writing style using Hugging Face's model
 def grade_paper(text, book_content):
@@ -25,7 +23,7 @@ def grade_paper(text, book_content):
     Provide a detailed breakdown of the grades and an overall assessment.
     """
     
-    # Use Hugging Face's model to generate a response based on the prompt
+    # Use the Hugging Face model to generate a response based on the prompt
     result = text_generator(prompt, max_length=500, num_return_sequences=1)
     
     # Return the model's generated feedback
@@ -43,6 +41,9 @@ student_submission = st.text_area("Enter your submission", height=300)
 # When the user submits the form
 if st.button("Grade My Paper"):
     if student_submission.strip() != "":
+        # Load the model lazily
+        text_generator = load_model()
+
         # Grade the paper
         grade_response = grade_paper(student_submission, book_content)
         st.write("### Grading Result:")
