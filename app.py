@@ -1,23 +1,41 @@
 import streamlit as st
 from transformers import pipeline
+import requests
 
 # Lazy loading of the model
 def load_model():
     return pipeline("text-generation", model="gpt2")
 
-# Function to generate a prompt based on the book title alone
-def generate_prompt(book_title):
+# Function to fetch book content from an API (like Google Books API)
+def fetch_book_content(book_title, author_name):
+    # Example: Use a public API like Google Books API to fetch book content
+    query = f"{book_title} {author_name}"
+    url = f"https://www.googleapis.com/books/v1/volumes?q={query}"
+    
+    response = requests.get(url).json()
+    if 'items' in response:
+        # Get the first book's description
+        book = response['items'][0]['volumeInfo']
+        description = book.get('description', 'No description available')
+        return description
+    else:
+        return "Sorry, I couldn't find any content for this book."
+
+# Function to generate a prompt based on the content of the book
+def generate_prompt(book_title, book_content):
     prompt = f"""
-    You are a professor asking a student to write a paper based on the following book:
+    You are a professor asking a student to write a paper on the following book:
     Title: {book_title}
 
-    Based on the book's title and general knowledge, ask the student a thoughtful, open-ended question that could be answered after reading the book.
+    Book content (summary or excerpt): {book_content}
+
+    Based on this content, ask the student a detailed, open-ended question about the book. 
+    The question should require a deep understanding of the book's themes, characters, or events.
     """
     return prompt
 
 # Function to grade the content, grammar, and writing style using Hugging Face's model
 def grade_paper(text, book_title):
-    # Combine book title with the input to give context
     prompt = f"""
     You are a professor grading a paper based on the book titled: {book_title}.
     Please evaluate the following submission based on the content, grammar, and writing style.
@@ -40,32 +58,39 @@ def grade_paper(text, book_title):
 # Streamlit UI
 st.title("Book-Based Paper Grader with Hugging Face (Self-Test)")
 
-# Input for the book title
+# Input for the book title and author
 book_title = st.text_input("Enter the title of the book you've read:")
+author_name = st.text_input("Enter the author of the book:")
 
-# When the user provides the book title
-if book_title:
-    # Generate a prompt based on the book's title
-    generated_prompt = generate_prompt(book_title)
+# When the user provides the book title and author
+if book_title and author_name:
+    # Fetch the book content (summary or excerpt)
+    book_content = fetch_book_content(book_title, author_name)
     
-    # Display the generated prompt
-    st.write("### Generated Prompt for You:")
-    st.write(generated_prompt)
-    
-    # Input for the student submission (response to the prompt)
-    student_submission = st.text_area("Enter your response to the prompt", height=300)
-    
-    # When the user submits their response
-    if st.button("Grade My Paper"):
-        if student_submission.strip() != "":
-            # Load the model lazily
-            text_generator = load_model()
+    if book_content:
+        # Generate a prompt based on the book content
+        generated_prompt = generate_prompt(book_title, book_content)
+        
+        # Display the generated prompt
+        st.write("### Generated Prompt for You:")
+        st.write(generated_prompt)
+        
+        # Input for the student submission (response to the prompt)
+        student_submission = st.text_area("Enter your response to the prompt", height=300)
+        
+        # When the user submits their response
+        if st.button("Grade My Paper"):
+            if student_submission.strip() != "":
+                # Load the model lazily
+                text_generator = load_model()
 
-            # Grade the paper based on the response
-            grade_response = grade_paper(student_submission, book_title)
-            st.write("### Grading Result:")
-            st.write(grade_response)
-        else:
-            st.warning("Please enter your response before grading.")
+                # Grade the paper based on the response
+                grade_response = grade_paper(student_submission, book_title)
+                st.write("### Grading Result:")
+                st.write(grade_response)
+            else:
+                st.warning("Please enter your response before grading.")
+    else:
+        st.warning("Could not fetch the content for this book. Please try again later.")
 else:
-    st.info("Please provide the book title to generate a prompt.")
+    st.info("Please provide both the book title and author to generate a prompt.")
