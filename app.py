@@ -5,14 +5,22 @@ from transformers import pipeline
 def load_model():
     return pipeline("text-generation", model="gpt2")
 
-# Function to grade the content, grammar, and writing style using Hugging Face's model
-def grade_paper(text, book_content):
-    # Combine book content with the input to give context
+# Function to generate a prompt based on the book title alone
+def generate_prompt(book_title):
     prompt = f"""
-    You are a professor grading a paper based on a book that was written by the user.
-    Please evaluate the following submission based on the content, grammar, and writing style.
+    You are a professor asking a student to write a paper based on the following book:
+    Title: {book_title}
 
-    Book content: {book_content}
+    Based on the book's title and general knowledge, ask the student a thoughtful, open-ended question that could be answered after reading the book.
+    """
+    return prompt
+
+# Function to grade the content, grammar, and writing style using Hugging Face's model
+def grade_paper(text, book_title):
+    # Combine book title with the input to give context
+    prompt = f"""
+    You are a professor grading a paper based on the book titled: {book_title}.
+    Please evaluate the following submission based on the content, grammar, and writing style.
 
     The student's submission: {text}
 
@@ -30,23 +38,34 @@ def grade_paper(text, book_content):
     return result[0]['generated_text'].strip()
 
 # Streamlit UI
-st.title("Paper Grader with Hugging Face")
+st.title("Book-Based Paper Grader with Hugging Face (Self-Test)")
 
-# Input for book content (optional)
-book_content = st.text_area("Enter the content of your book (optional)", height=300)
+# Input for the book title
+book_title = st.text_input("Enter the title of the book you've read:")
 
-# Input for the student submission (paper)
-student_submission = st.text_area("Enter your submission", height=300)
+# When the user provides the book title
+if book_title:
+    # Generate a prompt based on the book's title
+    generated_prompt = generate_prompt(book_title)
+    
+    # Display the generated prompt
+    st.write("### Generated Prompt for You:")
+    st.write(generated_prompt)
+    
+    # Input for the student submission (response to the prompt)
+    student_submission = st.text_area("Enter your response to the prompt", height=300)
+    
+    # When the user submits their response
+    if st.button("Grade My Paper"):
+        if student_submission.strip() != "":
+            # Load the model lazily
+            text_generator = load_model()
 
-# When the user submits the form
-if st.button("Grade My Paper"):
-    if student_submission.strip() != "":
-        # Load the model lazily
-        text_generator = load_model()
-
-        # Grade the paper
-        grade_response = grade_paper(student_submission, book_content)
-        st.write("### Grading Result:")
-        st.write(grade_response)
-    else:
-        st.warning("Please enter your submission before grading.")
+            # Grade the paper based on the response
+            grade_response = grade_paper(student_submission, book_title)
+            st.write("### Grading Result:")
+            st.write(grade_response)
+        else:
+            st.warning("Please enter your response before grading.")
+else:
+    st.info("Please provide the book title to generate a prompt.")
